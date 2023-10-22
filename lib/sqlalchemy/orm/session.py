@@ -39,6 +39,8 @@ from ..sql import roles
 from ..sql import visitors
 from ..sql.base import CompileState
 from ..sql.selectable import LABEL_STYLE_TABLENAME_PLUS_COL
+from ..connection_count import conn_leak as cc
+from flask import request
 
 __all__ = [
     "Session",
@@ -1259,7 +1261,7 @@ class Session(_SessionClassMethods):
 
     def _autobegin(self):
         if not self.autocommit and self._transaction is None:
-
+            cc.conn_leak[request.uuid] = cc.conn_leak.get(request.uuid, 0) + 1
             trans = SessionTransaction(self, autobegin=True)
             assert self._transaction is trans
             return True
@@ -1852,6 +1854,7 @@ class Session(_SessionClassMethods):
         self._close_impl(invalidate=True)
 
     def _close_impl(self, invalidate):
+        cc.conn_leak[request.uuid] = cc.conn_leak.get(request.uuid, 0) - 1
         self.expunge_all()
         if self._transaction is not None:
             for transaction in self._transaction._iterate_self_and_parents():
